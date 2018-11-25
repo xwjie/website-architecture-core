@@ -155,27 +155,167 @@
 
 
 
+---
+# 第2部分 高可用
 
-第2部分 高可用 / 17
-2 负载均衡与反向代理 / 18
-2.1 upstream配置 / 20
-2.2 负载均衡算法 / 21
-2.3 失败重试 / 23
-2.4 健康检查 / 24
-2.4.1 TCP心跳检查 / 24
-2.4.2 HTTP心跳检查 / 25
-2.5 其他配置 / 25
-2.5.1 域名上游服务器 / 25
-2.5.2 备份上游服务器 / 26
-2.5.3 不可用上游服务器 / 26
-2.6 长连接 / 26
-2.7 HTTP反向代理示例 / 29
-2.8 HTTP动态负载均衡 / 30
-2.8.1 Consul+Consul-template / 31
-2.8.2 Consul+OpenResty / 35
-2.9 Nginx四层负载均衡 / 39
-2.9.1 静态负载均衡 / 39
-2.9.2 动态负载均衡 / 41
+
+
+# 2 负载均衡与反向代理
+
+![基本部署架构](img/basic.jpg)
+
+关心几个方面：
+
+- 上游服务器配置：使用up stream 配置
+- 负载均衡算法
+- 失败重试
+- 服务器心跳检测
+
+## 2.1 upstream配置
+
+```
+upstream backend{
+    server 1.2.3.4 weight=1;
+    server 1.2.3.5 weight=2;
+}
+```
+
+## 2.2 负载均衡算法
+
+- round-robin: 轮询
+- ip_hash
+- hash key [consistent]
+- least_conn: 将请求负载均衡到最少活跃连接的上游服务器。  
+
+
+## 2.3 失败重试
+
+```
+upstream backend{
+    server 1.2.3.4 max_fails=2 fail_timeout=10s weight=1;
+    server 1.2.3.5 max_fails=2 fail_timeout=10s weight=2;
+}
+```
+
+## 2.4 健康检查
+
+### 2.4.1 TCP心跳检查 TCP心跳检查
+
+```
+upstream backend{
+    server 1.2.3.4 weight=1;
+    server 1.2.3.5 weight=2;
+    check interval=3000 rise=1 fall=3 timeout=2000 type=tcp;
+}
+```
+
+### 2.4.2 HTTP心跳检查
+
+
+```
+upstream backend{
+    server 1.2.3.4 weight=1;
+    server 1.2.3.5 weight=2;
+    check interval=3000 rise=1 fall=3 timeout=2000 type=http;
+    check_http_send "HEAD /status HTTP/1.0\r\n\r\n";
+    check_http_expect_alive http_2xx http_3xx;
+}
+```
+
+## 2.5 其他配置
+
+### 2.5.1 域名上游服务器
+
+```
+upstream backend{
+    server xiaowenjie.cn;
+}
+```
+
+域名ip改变的时候，upstrem不会更新。商业版才支持动态更新。
+
+### 2.5.2 备份上游服务器
+
+```
+upstream backend{
+    server 1.2.3.4 weight=1;
+    server 1.2.3.5 weight=2 backup;
+}
+```
+
+### 2.5.3 不可用上游服务器
+
+```
+upstream backend{
+    server 1.2.3.4:8080 weight=1;
+    server 1.2.3.5:9090 weight=2 down;
+}
+```
+
+## 2.6 长连接
+
+```
+upstream backend{
+    server 1.2.3.4 weight=1;
+    server 1.2.3.5 weight=2 backup;
+    keepalive 100;
+}
+```
+
+## 2.7 HTTP反向代理示例
+
+
+
+## 2.8 HTTP动态负载均衡
+
+增减机器的时候，无法自动注册到 upstream 中，可以使用 Consul 解决。
+
+Consul 开源的分布式服务注册与发现系统，通过HTTP API可以使得服务注册、发现实现起来非常简单。
+
+### 2.8.1 Consul+Consul-template 
+
+服务（如tomcat，springboot）启动的时候，调用 `consul java client ` API 实现注册。然后在 `Rumtime.getRuntime().addShutdownHook` 里面删除掉。
+
+[Consul-Template&Nginx实现Consul集群高可用](https://blog.csdn.net/songhaifengshuaige/article/details/79111676)
+
+[Consul+Registrator+Consul-template实现动态修改nginx配置文件](http://www.codexiu.cn/nginx/blog/12503/)
+
+这种方法需要 reload nginx，社区版可以使用Tengine的Dyups模块，微博的Upsync模块和使用OpenResty的balancer_by_lua 脚本 这3中方式实现不reload也能动态注册。
+
+### 2.8.2 Consul+OpenResty
+
+无reload动态负载均衡
+
+[Nginx+Lua开发](https://blog.csdn.net/l09711/article/details/46563953)
+
+原理：nginx启动的时候会调用 init_by_lua ，启动时拉去配置，并更新到共享字典来存储 upstream 列表，然后通过 init_worker_by_lua 启动定时器，定期去 consul 拉去配置并实施更新到共享字典。
+
+## 2.9 Nginx四层负载均衡
+
+1.9.0 版本开始支持。前面的upstream是 `HTTP七层负载均衡`，这里说的是 `TCP四层负载均衡` 。
+
+[linux负载均衡总结性说明（四层负载/七层负载）](http://www.cnblogs.com/kevingrace/p/6137881.html)
+
+### 2.9.1 静态负载均衡
+
+ngx_stream_core_module 默认没有启用，可以使用 --with-stream 启用。
+
+> ./configure --prefix=/usr/servers --with-stream
+
+```
+stream{
+    upstream xxx{
+
+    }
+
+    server{
+        
+    }
+}
+
+### 2.9.2 动态负载均衡
+
+
 参考资料 / 42
 3 隔离术 / 43
 3.1 线程隔离 / 43
