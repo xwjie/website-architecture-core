@@ -326,36 +326,223 @@ stream{
 
 ---
 
-3 隔离术 / 43
-3.1 线程隔离 / 43
-3.2 进程隔离 / 45
-3.3 集群隔离 / 45
-3.4 机房隔离 / 46
-3.5 读写隔离 / 47
-3.6 动静隔离 / 48
-3.7 爬虫隔离 / 49
-3.8 热点隔离 / 50
-3.9 资源隔离 / 50
-3.10 使用Hystrix实现隔离 / 51
-3.10.1 Hystrix简介 / 51
-3.10.2 隔离示例 / 52
-3.11 基于Servlet 3实现请求隔离 / 56
-3.11.1 请求解析和业务处理线程池分离 / 57
-3.11.2 业务线程池隔离 / 58
-3.11.3 业务线程池监控/运维/降级 / 58
-3.11.4 如何使用Servlet 3异步化 / 59
-3.11.5 一些Servlet 3异步化压测数据 / 64
-4 限流详解 / 66
-4.1 限流算法 / 67
-4.1.1 令牌桶算法 / 67
-4.1.2 漏桶算法 / 68
-4.2 应用级限流 / 69
-4.2.1 限流总并发/连接/请求数 / 69
-4.2.2 限流总资源数 / 70
-4.2.3 限流某个接口的总并发/请求数 / 70
-4.2.4 限流某个接口的时间窗请求数 / 70
-4.2.5 平滑限流某个接口的请求数 / 71
-4.3 分布式限流 / 75
+# 3 隔离术 
+
+## 3.1 线程隔离
+
+独立线程池
+
+## 3.2 进程隔离
+
+子应用
+
+## 3.3 集群隔离
+
+## 3.4 机房隔离
+
+## 3.5 读写隔离
+
+## 3.6 动静隔离
+
+CDN
+
+## 3.7 爬虫隔离
+
+爬虫流量可能更加高
+
+```
+set $flag 0;
+
+if($http_user_agent ~* "spider"){
+    set $flag 1;
+}
+
+if($flag = "0"){
+    // 
+}
+
+if($flag = "1"){
+
+}
+```
+
+## 3.8 热点隔离
+
+
+
+## 3.9 资源隔离
+
+## 3.10 使用Hystrix实现隔离
+
+[使用 Hystrix 实现自动降级与依赖隔离](http://www.importnew.com/25704.html)
+
+[Hystrix线程隔离技术解析-线程池](https://www.jianshu.com/p/df1525d58c20)
+
+
+## 3.11 基于Servlet 3实现请求隔离
+
+servlet 异步servlet可以单独设置线程池，不同业务放入不同线程池。
+
+[Servlet 3特性：异步Servlet](http://www.importnew.com/8864.html)
+
+
+```java
+@WebListener
+public class AppContextListener implements ServletContextListener {
+ 
+    public void contextInitialized(ServletContextEvent servletContextEvent) {
+ 
+        // create the thread pool
+        ThreadPoolExecutor executor = new ThreadPoolExecutor(100, 200, 50000L,
+                TimeUnit.MILLISECONDS, new ArrayBlockingQueue<Runnable>(100));
+        servletContextEvent.getServletContext().setAttribute("executor",
+                executor);
+ 
+    }
+ 
+    public void contextDestroyed(ServletContextEvent servletContextEvent) {
+        ThreadPoolExecutor executor = (ThreadPoolExecutor) servletContextEvent
+                .getServletContext().getAttribute("executor");
+        executor.shutdown();
+    }
+ 
+}
+```
+
+HttpServlet 里面不同业务可以使用不同线程池。
+
+```java
+@WebServlet(urlPatterns = "/AsyncLongRunningServlet", asyncSupported = true)
+public class AsyncLongRunningServlet extends HttpServlet {
+    private static final long serialVersionUID = 1L;
+ 
+    protected void doGet(HttpServletRequest request,
+            HttpServletResponse response) throws ServletException, IOException {
+        long startTime = System.currentTimeMillis();
+        System.out.println("AsyncLongRunningServlet Start::Name="
+                + Thread.currentThread().getName() + "::ID="
+                + Thread.currentThread().getId());
+ 
+        request.setAttribute("org.apache.catalina.ASYNC_SUPPORTED", true);
+ 
+        String time = request.getParameter("time");
+        int secs = Integer.valueOf(time);
+        // max 10 seconds
+        if (secs > 10000)
+            secs = 10000;
+ 
+        AsyncContext asyncCtx = request.startAsync();
+        asyncCtx.addListener(new AppAsyncListener());
+        asyncCtx.setTimeout(9000);
+ 
+        ThreadPoolExecutor executor = (ThreadPoolExecutor) request
+                .getServletContext().getAttribute("executor");
+ 
+        executor.execute(new AsyncRequestProcessor(asyncCtx, secs));
+        long endTime = System.currentTimeMillis();
+        System.out.println("AsyncLongRunningServlet End::Name="
+                + Thread.currentThread().getName() + "::ID="
+                + Thread.currentThread().getId() + "::Time Taken="
+                + (endTime - startTime) + " ms.");
+    }
+}
+```
+
+---
+
+# 4 限流详解
+
+## 4.1 限流算法
+
+[SOA架构之限流](http://www.cnblogs.com/yeahwell/p/7518514.html)
+
+### 4.1.1 令牌桶算法
+
+![令牌桶算法](img/tonken.png)
+
+### 4.1.2 漏桶算法
+
+![漏桶算法](img/leaky.png)
+
+## 4.2 应用级限流
+
+### 4.2.1 限流总并发/连接/请求数
+
+Tomcat Connector 配置
+
+```
+<Connector port="8080" protocol="HTTP/1.1"
+               connectionTimeout="20000"
+               redirectPort="8443"
+               maxThreads="800" maxConnections="2000" acceptCount="1000"/>
+```
+
+[Tomcat-connector的微调(1): acceptCount参数](http://ifeve.com/tomcat-connector-tuning-1/)
+
+[Tomcat-connector的微调(2): maxConnections, maxThreads](http://ifeve.com/tomcat-connector-tuning-2/)
+
+### 4.2.2 限流总资源数
+
+### 4.2.3 限流某个接口的总并发/请求数
+
+### 4.2.4 限流某个接口的时间窗请求数
+
+### 4.2.5 平滑限流某个接口的请求数
+
+Guava RateLimiter 提供的令牌桶算法可用于平滑突发限流（SmoothBursty）和平滑预热限流（SmoothWarmingUp）实现。
+
+[Guava官方文档-RateLimiter类](http://ifeve.com/guava-ratelimiter/)
+
+[RateLimit--使用guava来做接口限流](https://blog.csdn.net/JIESA/article/details/50412027)
+
+[限流 - Guava RateLimiter](https://my.oschina.net/xinxingegeya/blog/2251853)
+
+- SmoothBursty
+
+```java
+public static void testWithRateLimiter() {
+    Long start = System.currentTimeMillis();
+    
+    // 每秒不超过10个任务被提交
+    RateLimiter limiter = RateLimiter.create(10.0); 
+    
+    for (int i = 0; i < 10; i++) {
+        limiter.acquire(); // 请求RateLimiter, 超过permits会被阻塞
+        System.out.println("call execute.." + i);    
+    }
+
+    Long end = System.currentTimeMillis();
+    
+    System.out.println(end - start);
+}
+```
+
+- SmoothWarmingUp
+
+```java
+RateLimiter limiter = RateLimiter.create(5, 1000, TimeUnit.MILLISECONDS);
+
+System.out.println(limiter.acquire());
+System.out.println(limiter.acquire());
+System.out.println(limiter.acquire());
+System.out.println(limiter.acquire());
+System.out.println(limiter.acquire());
+
+Thread.sleep(1000L);
+System.out.println("sleep end...");
+
+System.out.println(limiter.acquire());
+System.out.println(limiter.acquire());
+System.out.println(limiter.acquire());
+System.out.println(limiter.acquire());
+System.out.println(limiter.acquire());
+```
+
+
+
+
+## 4.3 分布式限流
+
 4.3.1 Redis+Lua实现 / 76
 4.3.2 Nginx+Lua实现 / 77
 4.4 接入层限流 / 78
