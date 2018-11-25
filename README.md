@@ -166,7 +166,7 @@
 
 关心几个方面：
 
-- 上游服务器配置：使用up stream 配置
+- 上游服务器配置：使用upstream 配置
 - 负载均衡算法
 - 失败重试
 - 服务器心跳检测
@@ -284,15 +284,17 @@ Consul 开源的分布式服务注册与发现系统，通过HTTP API可以使�
 
 ### 2.8.2 Consul+OpenResty
 
-无reload动态负载均衡
+使用 OpenResty 的 balancer_by_lua 脚本 无reload动态负载均衡
 
 [Nginx+Lua开发](https://blog.csdn.net/l09711/article/details/46563953)
 
 原理：nginx启动的时候会调用 init_by_lua ，启动时拉去配置，并更新到共享字典来存储 upstream 列表，然后通过 init_worker_by_lua 启动定时器，定期去 consul 拉去配置并实施更新到共享字典。
 
+
+
 ## 2.9 Nginx四层负载均衡
 
-1.9.0 版本开始支持。前面的upstream是 `HTTP七层负载均衡`，这里说的是 `TCP四层负载均衡` 。
+1.9.0 版本开始支持。前面的 `upstream` 是 `HTTP七层负载均衡`，这里说的是 `TCP四层负载均衡` 使用的是 `stream` 。
 
 [linux负载均衡总结性说明（四层负载/七层负载）](http://www.cnblogs.com/kevingrace/p/6137881.html)
 
@@ -312,11 +314,18 @@ stream{
         
     }
 }
+```
 
 ### 2.9.2 动态负载均衡
 
+- ngx_stream_upsync_module 四层负载均衡(TCP)
+- ngx_upsync_module 七层负载均衡(HTTP)
 
-参考资料 / 42
+不需要reload
+
+
+---
+
 3 隔离术 / 43
 3.1 线程隔离 / 43
 3.2 进程隔离 / 45
